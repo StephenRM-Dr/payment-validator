@@ -1,0 +1,245 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Payment Validator API - Documentación del Sistema",
+    "description": "API de conciliación de pagos y manejo de Webhooks para la pasarela de procesamiento Payment Validator.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Servidor de Desarrollo Local"
+    }
+  ],
+  "paths": {
+    "/api/transacciones/validar": {
+      "post": {
+        "summary": "Validar y conciliar una transacción de Binance Pay",
+        "description": "Cruza los datos ingresados por el cajero con los registros pendientes inyectados por el Worker. La búsqueda se realiza estrictamente por monto, moneda y el sufijo del ID de Binance (mínimo 6 dígitos). Si se encuentra, se vincula al número de venta/factura.",
+        "tags": ["Transacciones"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "monto",
+                  "moneda",
+                  "binance_id_sufijo",
+                  "fecha_cajero"
+                ],
+                "properties": {
+                  "id_orden": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Número de venta o factura interna a la cual pertenece la transacción (Opcional).",
+                    "example": "VENT-1024"
+                  },
+                  "monto": {
+                    "type": "number",
+                    "format": "float",
+                    "description": "Monto exacto del pago recibido.",
+                    "example": 25.50
+                  },
+                  "moneda": {
+                    "type": "string",
+                    "description": "Criptomoneda utilizada en el pago.",
+                    "enum": ["USDT", "BTC", "ETH"],
+                    "example": "USDT"
+                  },
+                  "binance_id_sufijo": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 12,
+                    "description": "Sufijo del ID completo de la transacción de Binance: mínimo los últimos 6 dígitos que tipea el cajero, hasta 12 cuando el OCR logra leer más (reduce falsos positivos entre dos IDs que coinciden en los últimos 6 dígitos).",
+                    "example": "4310701056"
+                  },
+                  "fecha_cajero": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Fecha y hora local en formato ISO enviada desde el cliente del cajero.",
+                    "example": "2026-03-31T20:15:00.000Z"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pago verificado y conciliado con éxito.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Pago verificado con éxito"
+                    },
+                    "notificacionTelegram": {
+                      "type": "boolean",
+                      "description": "false si el pago quedó registrado pero el aviso al grupo de Telegram no pudo enviarse.",
+                      "example": true
+                    },
+                    "transaccion": {
+                      "type": "object",
+                      "description": "Objeto completo de la transacción actualizada en la base de datos."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Faltan campos obligatorios o no se encontró ninguna coincidencia pendiente en Binance."
+          },
+          "409": {
+            "description": "Conflicto de Idempotencia: El pago ya fue reclamado y verificado previamente."
+          },
+          "500": {
+            "description": "Error interno del servidor."
+          },
+          "503": {
+            "description": "Sistema suspendido, o fallo temporal de conexión con la base de datos: se puede reintentar."
+          }
+        }
+      }
+    },
+    "/api/transacciones/escanear": {
+      "post": {
+        "summary": "Escanear y extraer datos de comprobantes (OCR)",
+        "description": "Procesa una imagen en base64 usando Google Gemini Vision AI para extraer el monto, la moneda y el ID de Binance Pay del comprobante.",
+        "tags": ["Transacciones"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["imagenBase64"],
+                "properties": {
+                  "imagenBase64": {
+                    "type": "string",
+                    "description": "Cadena Base64 de la imagen del comprobante (puede incluir el prefijo data:image/png;base64,).",
+                    "example": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Datos extraídos de la imagen con éxito.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Imagen procesada con éxito"
+                    },
+                    "datos": {
+                      "type": "object",
+                      "properties": {
+                        "monto": { "type": "number", "example": 25.5 },
+                        "moneda": { "type": "string", "example": "USDT" },
+                        "binance_id_sufijo": { "type": "string", "example": "4310701056" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta la imagen en la petición."
+          },
+          "500": {
+            "description": "Error al procesar la imagen con Gemini."
+          },
+          "502": {
+            "description": "El proveedor de IA no respondió (modelo retirado, cuota agotada o fallo de red): reintentar o llenar los datos a mano."
+          }
+        }
+      }
+    },
+    "/api/webhooks/binance-incoming": {
+      "post": {
+        "summary": "Recibir transacciones de Binance (Webhook Interno)",
+        "description": "Endpoint seguro que recibe los datos de transacciones procesadas por el Binance Worker y las registra como pendientes en la base de datos Neon.",
+        "tags": ["Webhooks"],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Webhook-Secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Secreto compartido entre el Worker y este backend para autorizar la petición."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["binance_id_completo", "monto", "moneda"],
+                "properties": {
+                  "binance_id_completo": {
+                    "type": "string",
+                    "description": "El ID completo de la transacción provisto por Binance.",
+                    "example": "PAY_1702484920000"
+                  },
+                  "monto": {
+                    "type": "number",
+                    "format": "float",
+                    "description": "Monto de la transacción.",
+                    "example": 50.00
+                  },
+                  "moneda": {
+                    "type": "string",
+                    "description": "Criptomoneda usada en Binance.",
+                    "example": "USDT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transacción pre-registrada exitosamente o detectada como duplicado seguro.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Transacción pre-registrada desde Binance"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado (Falta o es incorrecto el X-Webhook-Secret)."
+          },
+          "500": {
+            "description": "Error interno del servidor o de base de datos."
+          },
+          "503": {
+            "description": "Fallo temporal de conexión con la base de datos: la transacción NO se registró y el worker debe reenviarla."
+          }
+        }
+      }
+    }
+  }
+}

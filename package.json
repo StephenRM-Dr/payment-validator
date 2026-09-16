@@ -1,0 +1,32 @@
+{
+  "name": "payment-validator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-bank payment verification platform: AI-assisted receipt OCR, teller (cajero) UI, admin dashboard, and Excel reporting. Portfolio copy with sanitized data.",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "node --test tests/**/*.test.mjs",
+    "db:migrate": "node scripts/aplicar-migraciones.mjs",
+    "db:check": "node scripts/verificar-esquema.mjs"
+  },
+  "devDependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@types/node": "^26.0.1",
+    "@types/react": "^19.2.17",
+    "@types/swagger-ui-react": "^5.18.0",
+    "swagger-ui-react": "^5.32.8",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@google/genai": "^2.10.0",
+    "exceljs": "^4.4.0",
+    "heic2any": "^0.0.4",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "undici": "^8.10.2"
+  }
+}
