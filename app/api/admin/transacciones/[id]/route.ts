@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { obtenerSql, conReintentos, esErrorDeConexion, type SqlNeon } from "../../../../lib/db";
 import { verificarAccesoAdmin } from "../../../../lib/auth-admin";
 import { ipDeLaPeticion } from "../../../../lib/seguridad";
+import { estaEnModoDemo, editarDemo } from "../../../../lib/datos-demo";
 
 const LONGITUD_MAX_COMANDA = 60;
 const LONGITUD_MAX_NOTA = 500;
@@ -105,6 +106,33 @@ async function registrarHistorial(
   }
 }
 
+type EdicionPreparada =
+  | { ok: true; id: number; campos: CamposEdicion }
+  | { ok: false; response: NextResponse };
+
+// Validación compartida por ambos caminos (demo y Postgres): ID de la URL, cuerpo JSON
+// y qué campos se piden cambiar. Separado de PATCH para que el control de complejidad
+// del linter no cuente estos tres chequeos tempranos junto con el resto del handler.
+async function prepararEdicion(request: Request, params: Promise<{ id: string }>): Promise<EdicionPreparada> {
+  const { id: idParam } = await params;
+  const id = Number.parseInt(idParam, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, response: NextResponse.json({ error: "ID de transacción inválido." }, { status: 400 }) };
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return { ok: false, response: NextResponse.json({ error: "Cuerpo de petición inválido." }, { status: 400 }) };
+  }
+
+  const resultado = extraerCampos(body);
+  if (resultado.ok === false) {
+    return { ok: false, response: NextResponse.json({ error: resultado.error }, { status: 400 }) };
+  }
+
+  return { ok: true, id, campos: resultado.campos };
+}
+
 // Edición administrativa puntual de una transacción: número de venta, nota interna y
 // anulación. No pasa por las reglas del cajero (duplicados, conciliación de fondos) porque
 // es una corrección de trazabilidad sobre un registro que ya existe, no una nueva validación.
@@ -116,22 +144,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: acceso.error }, { status: acceso.estado });
     }
 
-    const { id: idParam } = await params;
-    const id = Number.parseInt(idParam, 10);
-    if (!Number.isInteger(id) || id <= 0) {
-      return NextResponse.json({ error: "ID de transacción inválido." }, { status: 400 });
-    }
+    const preparado = await prepararEdicion(request, params);
+    if (preparado.ok === false) return preparado.response;
+    const { id, campos } = preparado;
 
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Cuerpo de petición inválido." }, { status: 400 });
+    // 🧪 Sin DATABASE_URL: la edición se aplica sobre la grilla demo en memoria en vez
+    // de Postgres — mismas reglas de negocio (nota obligatoria para anular, etc.).
+    if (estaEnModoDemo()) {
+      const resultadoDemo = editarDemo(id, campos);
+      if (resultadoDemo.ok === false) {
+        return NextResponse.json({ error: resultadoDemo.error }, { status: resultadoDemo.status });
+      }
+      return NextResponse.json({ transaccion: resultadoDemo.transaccion }, { status: 200 });
     }
-
-    const resultado = extraerCampos(body);
-    if (resultado.ok === false) {
-      return NextResponse.json({ error: resultado.error }, { status: 400 });
-    }
-    const campos = resultado.campos;
 
     const sql = obtenerSql();
 

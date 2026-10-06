@@ -118,6 +118,9 @@ export default function PanelAdministrativo() {
   const [transacciones, setTransacciones] = useState<Transaccion[]>([]);
   const [metricas, setMetricas] = useState<Metricas>(METRICAS_INICIALES);
   const [totalRegistros, setTotalRegistros] = useState(0);
+  // Sin DATABASE_URL el backend sirve una grilla fija de ejemplo (ver app/lib/datos-demo.ts)
+  // en vez de errorar: esto solo avisa en pantalla que lo que se ve no es data real.
+  const [modoDemo, setModoDemo] = useState(false);
 
   // Filtros de UI
   const [fechaInicio, setFechaInicio] = useState("");
@@ -264,6 +267,7 @@ export default function PanelAdministrativo() {
         if (silencioso && generacionAlPedir !== generacionDatos.current) return true;
         setTransacciones(data.transacciones || []);
         setMetricas(data.metricas || METRICAS_INICIALES);
+        setModoDemo(Boolean(data.modoDemo));
         setPage(data.paginacion?.page || 1);
         setTotalPages(data.paginacion?.totalPages || 1);
         setTotalRegistros(data.paginacion?.totalTransaccionesGlobales || 0);
@@ -546,6 +550,14 @@ export default function PanelAdministrativo() {
           <button onClick={cerrarSesion} style={{ padding: "10px 15px", background: "#f38ba8", color: "#11111b", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>🔒 Salir</button>
         </div>
       </div>
+
+      {/* Sin DATABASE_URL configurada: lo que se ve es la grilla fija de app/lib/datos-demo.ts,
+          no datos reales. Las ediciones funcionan pero viven solo en memoria del servidor. */}
+      {modoDemo && (
+        <div style={{ marginBottom: "15px", padding: "12px 16px", borderRadius: "8px", background: "rgba(137,180,250,0.12)", border: "1px solid #89b4fa", color: "#89b4fa", fontWeight: "bold", fontSize: "14px" }}>
+          🧪 Modo demo: no hay una base de datos conectada, así que estás viendo datos de ejemplo fijos (no reales). Las ediciones se guardan solo en memoria mientras el servidor siga corriendo.
+        </div>
+      )}
 
       {/* Avisos en la interfaz (reemplazan a los alert() del navegador) */}
       {aviso && (

@@ -3,6 +3,7 @@ import { obtenerSql, conReintentos, type SqlNeon } from "../../../lib/db";
 import { respuestaDeError, verificarPinAdmin } from "../../../lib/http";
 import { VALORES_SUCURSALES, VALORES_PROVEEDORES } from "../../../lib/sucursales";
 import { LONGITUD_MAX_BUSQUEDA } from "../../../lib/validacion";
+import { estaEnModoDemo, obtenerAuditoriaDemo } from "../../../lib/datos-demo";
 
 // Listas blancas de valores permitidos: cualquier valor fuera de estas listas se descarta.
 // SIN_ASIGNAR representa las transacciones crudas del worker (columna 'ciudad' aún nula).
@@ -115,6 +116,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const filtros = extraerFiltros(searchParams);
     const { page, limit, offset, exportarTodo } = filtros;
+
+    // 🧪 Sin DATABASE_URL (clon nuevo del repo, demo de portfolio sin base provisionada):
+    // misma forma de respuesta, pero servida desde una grilla fija en vez de Postgres.
+    if (estaEnModoDemo()) {
+      return NextResponse.json(obtenerAuditoriaDemo(filtros), { status: 200 });
+    }
 
     const sql = obtenerSql();
     const clausulaWhere = construirClausulaWhere(sql, filtros);
