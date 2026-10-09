@@ -155,6 +155,9 @@ export default function VisorInicio() {
                 Entrar como Admin
               </Link>
             </div>
+            <p data-reveal style={{ fontSize: "13px", color: COLORES.textoTenue, marginTop: "14px" }}>
+              Demo pública con datos ficticios · PIN de Admin: <strong style={{ color: COLORES.textoSuave, letterSpacing: "2px" }}>246810</strong>
+            </p>
           </div>
 
           <div className="pv-capa pv-profundidad-5" aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
